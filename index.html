@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2E7A4F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="水やり帳">
+<title>水やり帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{
+  --bg:#EEF3EE; --surface:#FFFFFF; --ink:#17261E; --muted:#5B6B62; --line:#D5DFD7;
+  --leaf:#2E7A4F; --leaf-ink:#FFFFFF; --water:#2F86B3; --warn:#B8680F; --danger:#B3382C; --chip:#E3EDE5;
+  --radius:14px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#101814; --surface:#18231D; --ink:#E6EFE8; --muted:#93A59A; --line:#2A3A31;
+    --leaf:#5DBB84; --leaf-ink:#0E1A13; --water:#6BB6DC; --warn:#E0A04A; --danger:#E27A6E; --chip:#22322A;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+  font-size:16px; line-height:1.6; font-variant-numeric:tabular-nums;
+  padding-top:env(safe-area-inset-top,0px);
+}
+a{color:inherit}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--water);outline-offset:2px}
+
+.topbar{
+  display:flex;align-items:center;gap:8px;padding:12px 16px;max-width:1000px;margin:0 auto;
+}
+.topbar h1{font-size:1.25rem;margin:0;flex:1;font-weight:700;letter-spacing:.04em}
+.topbar h1 a{text-decoration:none}
+main{max-width:1000px;margin:0 auto;padding:4px 16px calc(112px + env(safe-area-inset-bottom,0px))}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1.5px solid var(--leaf);background:transparent;color:var(--leaf);
+  padding:8px 16px;border-radius:999px;cursor:pointer;text-decoration:none;font-weight:700;
+  min-height:40px;line-height:1.2;
+}
+.btn.primary{background:var(--leaf);color:var(--leaf-ink)}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn.danger-line{border-color:var(--danger);color:var(--danger)}
+.btn.ghost{border-color:var(--line);color:var(--muted)}
+.btn.small{padding:4px 12px;min-height:34px;font-size:.9rem}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* thumbnail */
+.thumb{position:relative;width:64px;height:64px;border-radius:12px;overflow:hidden;background:var(--chip);flex:none}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb span{display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;
+  font-size:.65rem;line-height:1.2;color:var(--muted);padding:4px}
+.thumb.none img{display:none}
+.thumb.none span{display:flex}
+.thumb.big{width:112px;height:112px;border-radius:18px}
+.thumb.big span{font-size:.8rem}
+
+/* ---- home list ---- */
+.sec-title{font-size:1rem;margin:20px 0 8px;color:var(--muted);font-weight:700}
+table.list{width:100%;border-collapse:separate;border-spacing:0 8px}
+table.list th{font-size:.8rem;color:var(--muted);font-weight:500;text-align:left;padding:0 10px}
+table.list td{background:var(--surface);padding:10px;vertical-align:middle}
+table.list td:first-child{border-radius:var(--radius) 0 0 var(--radius)}
+table.list td:last-child{border-radius:0 var(--radius) var(--radius) 0}
+table.list tr.row.on td{background:color-mix(in srgb,var(--water) 10%,var(--surface))}
+.c-name a{font-weight:700;font-size:1.05rem;text-decoration:none}
+.c-name small{display:block;color:var(--muted);font-size:.8rem}
+.gauge{height:6px;border-radius:3px;background:var(--chip);margin-top:6px;overflow:hidden;max-width:220px}
+.gauge i{display:block;height:100%;background:var(--water);border-radius:3px}
+.gauge.over i{background:var(--warn)}
+.soon{color:var(--warn);font-weight:700;font-size:.8rem;margin-left:6px}
+.chk{display:inline-flex;align-items:center;gap:8px;cursor:pointer;min-height:44px}
+.chk input{width:24px;height:24px;accent-color:var(--water);margin:0}
+.wt{display:inline-flex;align-items:center;gap:4px}
+.wt input{width:84px}
+input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea{
+  width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);min-height:42px
+}
+.wt input{width:84px;text-align:right}
+
+@media (max-width:719px){
+  table.list,table.list tbody{display:block}
+  table.list thead{display:none}
+  table.list tr.row{
+    display:grid;grid-template-columns:76px 1fr auto;column-gap:10px;row-gap:2px;
+    background:var(--surface);border-radius:var(--radius);padding:12px;margin-bottom:10px;
+    grid-template-areas:"thumb name detail" "thumb last last" "thumb avg avg" "check base weight";
+  }
+  table.list tr.row.on{background:color-mix(in srgb,var(--water) 10%,var(--surface))}
+  table.list td,table.list tr.row.on td{background:none;padding:0;border-radius:0 !important}
+  .c-thumb{grid-area:thumb;align-self:start}
+  .c-name{grid-area:name}.c-last{grid-area:last;font-size:.92rem}
+  .c-avg{grid-area:avg;font-size:.88rem;color:var(--muted)}
+  .c-avg::before{content:attr(data-label) "：";}
+  .c-detail{grid-area:detail}
+  .c-check{grid-area:check;margin-top:6px}
+  .c-base{grid-area:base;margin-top:6px;align-self:center;font-size:.88rem;color:var(--muted);text-align:right}
+  .c-base:not(:empty)::before{content:"基準 "}
+  .c-weight{grid-area:weight;margin-top:6px}
+  .c-base:empty,.c-weight:empty{display:none}
+  .thumb{width:76px;height:76px}
+}
+
+.actionbar{
+  position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+}
+.actionbar .in{max-width:1000px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.actionbar label{font-size:.85rem;color:var(--muted);white-space:nowrap}
+.actionbar input{flex:1;max-width:200px}
+.actionbar .btn{flex:1;max-width:240px;margin-left:auto}
+
+.dlist{display:grid;gap:8px}
+.drow{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);padding:10px 14px;border-radius:var(--radius)}
+.drow span{color:var(--muted)}
+
+.empty{color:var(--muted);text-align:center;padding:40px 0}
+
+/* ---- detail ---- */
+.back{display:inline-block;margin:4px 0 12px;color:var(--muted);text-decoration:none}
+.hero{display:flex;gap:16px;align-items:center;margin-bottom:16px}
+.hero h2{margin:0;font-size:1.5rem;line-height:1.3}
+.hero p{margin:2px 0 0;color:var(--muted);font-size:.9rem}
+.badge{display:inline-block;background:var(--danger);color:#fff;border-radius:999px;padding:0 10px;font-size:.78rem;margin-left:8px;vertical-align:middle}
+.card{background:var(--surface);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px}
+.kv{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.kv b{font-size:1.4rem}
+.kv small{color:var(--muted);display:block;font-size:.8rem}
+.acc{background:var(--surface);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+.acc-head{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 4px}
+.acc-toggle{flex:1;display:flex;align-items:center;gap:8px;background:none;border:0;cursor:pointer;text-align:left;font-weight:700;font-size:1.05rem;padding:10px 12px;min-height:44px}
+.acc-toggle .count{font-weight:400;color:var(--muted);font-size:.85rem}
+.acc-toggle svg{margin-left:auto;transition:transform .2s}
+.acc-toggle[aria-expanded="false"] svg{transform:rotate(-90deg)}
+.acc-body{padding:0 16px 14px}
+.avgline{margin:0 16px 12px;padding:8px 12px;background:var(--chip);border-radius:10px;font-size:.92rem}
+.avgline b{color:var(--water)}
+.item{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item time{font-weight:700;min-width:6.2em}
+.item .what{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.tag{background:var(--chip);border-radius:999px;padding:0 10px;font-size:.85rem}
+.tag.water{background:color-mix(in srgb,var(--water) 18%,transparent);color:var(--water);font-weight:700}
+.sub{color:var(--muted);font-size:.82rem}
+.xbtn{background:none;border:0;color:var(--muted);cursor:pointer;font-size:1.2rem;line-height:1;padding:4px 8px;min-height:32px}
+.memo{padding:8px 0;border-top:1px solid var(--line)}
+.memo:first-child{border-top:0}
+.memo time{font-weight:700;font-size:.9rem}
+.memo p{margin:2px 0 0;white-space:pre-wrap;word-break:break-word}
+.danger-zone{margin-top:24px;text-align:center}
+
+/* ---- forms ---- */
+.form{background:var(--surface);border-radius:var(--radius);padding:16px;display:grid;gap:14px}
+.form label{display:grid;gap:4px;font-weight:700;font-size:.9rem}
+.form label small{font-weight:400;color:var(--muted)}
+.login{max-width:380px;margin:12vh auto 0}
+.login h1{text-align:center;letter-spacing:.06em}
+
+/* ---- modal / toast ---- */
+.overlay{position:fixed;inset:0;background:rgba(10,20,14,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal{background:var(--surface);border-radius:18px;padding:20px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.modal h3{margin:0 0 10px;font-size:1.1rem}
+.mbody{display:grid;gap:10px}
+.mbody p{margin:0}
+.mbody textarea{min-height:130px;resize:vertical}
+.mact{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;z-index:60;font-size:.92rem;max-width:90vw}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<div id="top"></div>
+<main id="app"></main>
+
+<script>
+/* ============ 設定 ============ */
+const SUPABASE_URL = 'https://yoyuqqlmchhcddngtohd.supabase.co/rest/v1/';          // 例: https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = 'sb_publishable_gs_PTjpqiw8bucCmMGzM5Q_etxykUBI'; // Project Settings > API の anon public key
+const AVG_COUNT = 3;                                // 平均に使う「直近の間隔」の数
+const IMAGE_DIR = 'images';                         // 画像フォルダ（images/001.jpg）
+
+/* ============ ユーティリティ ============ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const fmt = s => s ? s.replaceAll('-', '/') : '';
+const dayNum = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
+const diff = (a, b) => dayNum(a) - dayNum(b);
+const app = $('#app');
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+function modal({ title, body = '', ok = 'OK', cancel = 'キャンセル', danger = false, onOk }) {
+  const el = document.createElement('div');
+  el.className = 'overlay';
+  el.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+    <h3>${esc(title)}</h3><div class="mbody">${body}</div>
+    <div class="mact"><button class="btn ghost" data-x>${esc(cancel)}</button>
+    <button class="btn ${danger ? 'danger' : 'primary'}" data-ok>${esc(ok)}</button></div></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.addEventListener('mousedown', e => { if (e.target === el) close(); });
+  el.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  $('[data-x]', el).onclick = close;
+  $('[data-ok]', el).onclick = async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try { const r = onOk ? await onOk(el) : true; if (r !== false) close(); else btn.disabled = false; }
+    catch (err) { toast(err.message || '失敗しました'); btn.disabled = false; }
+  };
+  const f = $('input,textarea', el); if (f) f.focus(); else $('[data-ok]', el).focus();
+  return el;
+}
+
+/* ============ Supabase ============ */
+if (SUPABASE_URL.startsWith('YOUR_')) {
+  app.innerHTML = `<div class="card"><b>設定が必要です</b><p>index.html の先頭にある SUPABASE_URL と SUPABASE_ANON_KEY を設定してください。</p></div>`;
+  throw new Error('Supabase not configured');
+}
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const S = { plants: [], records: [], memos: [], byPlant: new Map() };
+let loaded = false;
+
+async function fetchAll(table) {
+  let out = [], from = 0; const size = 1000;
+  for (;;) {
+    const { data, error } = await sb.from(table).select('*')
+      .order('created_at', { ascending: true }).order('id', { ascending: true })
+      .range(from, from + size - 1);
+    if (error) throw error;
+    out = out.concat(data);
+    if (data.length < size) break;
+    from += size;
+  }
+  return out;
+}
+async function load() {
+  const [p, r, m] = await Promise.all([fetchAll('plants'), fetchAll('records'), fetchAll('memos')]);
+  S.plants = p; S.records = r; S.memos = m;
+  S.byPlant = new Map();
+  for (const rec of r) {
+    if (!S.byPlant.has(rec.plant_id)) S.byPlant.set(rec.plant_id, []);
+    S.byPlant.get(rec.plant_id).push(rec);
+  }
+  loaded = true;
+}
+async function refresh() { await load(); render(); }
+
+/* ============ 計算 ============ */
+function info(p) {
+  const recs = S.byPlant.get(p.id) || [];
+  const dates = [...new Set(recs.filter(r => r.watered).map(r => r.record_date))].sort().reverse();
+  const use = dates.slice(0, AVG_COUNT + 1);
+  const intervals = [];
+  for (let i = 0; i < use.length - 1; i++) intervals.push(diff(use[i], use[i + 1]));
+  const avg = intervals.length ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length) : null;
+  const last = dates[0] || null;
+  const elapsed = last ? diff(todayStr(), last) : null;
+  return { recs, dates, last, avg, elapsed, intervals };
+}
+function dispName(p) {
+  const same = S.plants.filter(x => x.name === p.name).length;
+  return same > 1 ? `${p.name}${p.seq}` : p.name;
+}
+function thumb(p, big = false) {
+  const no = String(p.no).padStart(3, '0');
+  return `<div class="thumb${big ? ' big' : ''}"><img src="${IMAGE_DIR}/${no}.jpg" alt="" loading="lazy"
+    onerror="this.parentNode.classList.add('none')"><span>No Photo</span></div>`;
+}
+const chevron = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+
+/* ============ ヘッダー ============ */
+function renderTop(showNew = true) {
+  $('#top').innerHTML = `<div class="topbar"><h1><a href="#/">水やり帳</a></h1>
+    ${showNew ? '<a class="btn small" href="#/new">＋ 植物を追加</a>' : ''}
+    <button class="btn small ghost" id="logout">ログアウト</button></div>`;
+  $('#logout').onclick = () => sb.auth.signOut();
+}
+
+/* ============ ログイン ============ */
+function renderLogin() {
+  $('#top').innerHTML = '';
+  app.innerHTML = `<div class="login"><h1>水やり帳</h1><div class="form">
+    <label>メールアドレス<input type="email" id="em" autocomplete="username"></label>
+    <label>パスワード<input type="password" id="pw" autocomplete="current-password"></label>
+    <button class="btn primary" id="go">ログイン</button></div></div>`;
+  const go = async () => {
+    const { error } = await sb.auth.signInWithPassword({ email: $('#em').value.trim(), password: $('#pw').value });
+    if (error) toast('ログインできません：メールアドレスとパスワードを確認してください');
+  };
+  $('#go').onclick = go;
+  $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+}
+
+/* ============ 共通ページ ============ */
+function renderHome() {
+  renderTop();
+  const active = S.plants.filter(p => !p.deleted_at);
+  const deleted = S.plants.filter(p => p.deleted_at);
+  const rows = active.map(p => ({ p, i: info(p) })).sort((a, b) => {
+    if (a.i.last === b.i.last) return a.p.no - b.p.no;
+    if (!a.i.last) return -1; if (!b.i.last) return 1;
+    return a.i.last.localeCompare(b.i.last);
+  });
+
+  const rowHtml = ({ p, i }) => {
+    const over = i.avg != null && i.elapsed >= i.avg;
+    const pct = i.avg ? Math.min(100, Math.round(i.elapsed / i.avg * 100)) : 0;
+    const lastTxt = i.last
+      ? `${fmt(i.last)}（${i.elapsed === 0 ? '本日' : i.elapsed + '日経過'}）${over ? '<span class="soon">そろそろ</span>' : ''}`
+      : '記録なし';
+    return `<tr class="row" data-id="${p.id}" ${p.base_weight ? 'data-w="1"' : ''}>
+      <td class="c-thumb">${thumb(p)}</td>
+      <td class="c-name"><a href="#/plant/${p.id}">${esc(dispName(p))}</a><small>${esc(p.kind)}</small></td>
+      <td class="c-last">${lastTxt}${i.avg ? `<div class="gauge${over ? ' over' : ''}" title="平均間隔に対する経過"><i style="width:${pct}%"></i></div>` : ''}</td>
+      <td class="c-avg" data-label="平均">${i.avg != null ? i.avg + '日' : '—'}</td>
+      <td class="c-check"><label class="chk"><input type="checkbox" class="w-check"><span>水やり</span></label></td>
+      <td class="c-base">${p.base_weight ? p.base_weight + 'g' : ''}</td>
+      <td class="c-weight">${p.base_weight ? `<span class="wt"><input type="number" inputmode="numeric" step="1" min="0" class="w-weight" placeholder="重さ" aria-label="${esc(dispName(p))}の重さ"> g</span>` : ''}</td>
+      <td class="c-detail"><a class="btn small" href="#/plant/${p.id}">詳細</a></td></tr>`;
+  };
+
+  app.innerHTML = `
+    ${rows.length ? `<table class="list"><thead><tr><th></th><th>品種名</th><th>前回水やり日</th><th>平均水やり間隔</th><th>水やり</th><th>基準の重さ</th><th>重さ入力</th><th></th></tr></thead>
+      <tbody>${rows.map(rowHtml).join('')}</tbody></table>`
+      : `<div class="empty">植物がまだありません。<br>右上の「＋ 植物を追加」から登録しましょう。</div>`}
+    ${deleted.length ? `<h2 class="sec-title">削除済みの植物</h2><div class="dlist">
+      ${deleted.map(p => `<div class="drow"><div>${esc(dispName(p))} <span>${esc(p.kind)}</span></div><a class="btn small" href="#/plant/${p.id}">詳細</a></div>`).join('')}</div>` : ''}`;
+
+  document.body.insertAdjacentHTML('beforeend', `<div class="actionbar" id="bar"><div class="in">
+    <label for="date">日付</label><input type="date" id="date" value="${todayStr()}">
+    <button class="btn primary" id="submit">登録</button></div></div>`);
+
+  const tbody = $('tbody');
+  if (tbody) tbody.addEventListener('input', e => {
+    const tr = e.target.closest('tr'); if (!tr) return;
+    const w = $('.w-weight', tr);
+    tr.classList.toggle('on', $('.w-check', tr).checked || !!(w && w.value !== ''));
+  });
+
+  $('#submit').onclick = async (e) => {
+    const date = $('#date').value;
+    if (!date) return toast('日付を入力してください');
+    const items = [];
+    for (const tr of $$('tbody tr.row')) {
+      const checked = $('.w-check', tr).checked;
+      const wEl = $('.w-weight', tr);
+      const wv = wEl ? wEl.value.trim() : '';
+      if (!checked && wv === '') continue;
+      if (wv !== '' && !/^\d+$/.test(wv)) return toast('重さは整数で入力してください');
+      items.push({ plant_id: tr.dataset.id, record_date: date, watered: checked, weight: wv === '' ? null : parseInt(wv, 10) });
+    }
+    if (!items.length) return toast('入力がありません');
+    e.currentTarget.disabled = true;
+    const { error } = await sb.from('records').insert(items);
+    if (error) { toast('登録に失敗しました：' + error.message); e.currentTarget.disabled = false; return; }
+    await refresh();
+    toast(`${items.length}件を登録しました`);
+  };
+}
+
+/* ============ 詳細ページ ============ */
+function renderDetail(id) {
+  renderTop();
+  const p = S.plants.find(x => x.id === id);
+  if (!p) { app.innerHTML = `<div class="empty">植物が見つかりません。</div><p style="text-align:center"><a class="btn" href="#/">一覧へ戻る</a></p>`; return; }
+  const i = info(p);
+  const memos = S.memos.filter(m => m.plant_id === id)
+    .sort((a, b) => b.memo_date.localeCompare(a.memo_date) || b.created_at.localeCompare(a.created_at));
+  const recs = [...i.recs].sort((a, b) => b.record_date.localeCompare(a.record_date) || b.created_at.localeCompare(a.created_at));
+  const intervalOf = d => { const k = i.dates.indexOf(d); return k >= 0 && k < i.dates.length - 1 ? diff(d, i.dates[k + 1]) : null; };
+
+  const avgText = i.avg != null
+    ? `過去${i.intervals.length}回の平均間隔：<b>${i.avg}日</b>`
+    : `平均間隔：— <span class="sub">（水やりが2回以上で計算）</span>`;
+
+  app.innerHTML = `
+    <a class="back" href="#/">← 一覧へ</a>
+    <div class="hero">${thumb(p, true)}<div>
+      <h2>${esc(dispName(p))}${p.deleted_at ? '<span class="badge">削除済み</span>' : ''}</h2>
+      <p>${esc(p.kind)}${p.purchased_on ? '　購入日 ' + fmt(p.purchased_on) : ''}</p>
+      <p>${i.last ? `前回 ${fmt(i.last)}（${i.elapsed === 0 ? '本日' : i.elapsed + '日経過'}）` : '水やり記録なし'}</p></div></div>
+
+    <div class="card kv"><div><small>基準の重さ</small><b>${p.base_weight ? p.base_weight + ' g' : '未設定'}</b></div>
+      <button class="btn small" id="edit-base">${p.base_weight ? '更新' : '設定'}</button></div>
+
+    <section class="acc" id="acc-memo">
+      <div class="acc-head"><button class="acc-toggle" aria-expanded="true">メモ <span class="count">${memos.length}件</span>${chevron}</button>
+        <button class="btn small" id="add-memo">メモ追加</button></div>
+      <div class="acc-body">${memos.length ? memos.map(m => `<div class="memo"><time>${fmt(m.memo_date)}</time><p>${esc(m.body)}</p></div>`).join('') : '<p class="sub">メモはまだありません。</p>'}</div>
+    </section>
+
+    <section class="acc" id="acc-hist">
+      <div class="acc-head"><button class="acc-toggle" aria-expanded="true">水やり履歴 <span class="count">${i.dates.length}回</span>${chevron}</button></div>
+      <div class="avgline">${avgText}</div>
+      <div class="acc-body">${recs.length ? recs.map(r => {
+        const iv = r.watered ? intervalOf(r.record_date) : null;
+        return `<div class="item"><time>${fmt(r.record_date)}</time><div class="what">
+          ${r.watered ? '<span class="tag water">水やり</span>' : ''}
+          ${r.weight != null ? `<span class="tag">重さ ${r.weight}g</span>` : ''}
+          ${iv != null ? `<span class="sub">前回から${iv}日</span>` : ''}</div>
+          <button class="xbtn" data-del="${r.id}" aria-label="この記録を削除">×</button></div>`;
+      }).join('') : '<p class="sub">記録はまだありません。</p>'}</div>
+    </section>
+
+    <div class="danger-zone">${p.deleted_at
+      ? `<p class="sub">この植物は削除済みです（記録は閲覧できます）。</p><button class="btn" id="restore">元に戻す</button>`
+      : `<button class="btn danger-line" id="delete">この植物を削除</button>`}</div>`;
+
+  $$('.acc-toggle').forEach(b => b.onclick = () => {
+    const open = b.getAttribute('aria-expanded') === 'true';
+    b.setAttribute('aria-expanded', String(!open));
+    $('.acc-body', b.closest('.acc')).hidden = open;
+  });
+
+  $('#edit-base').onclick = () => modal({
+    title: '基準の重さを更新', ok: '保存',
+    body: `<p class="sub">空欄で保存すると「重さ管理なし」になります。</p><label>基準の重さ（g）<input type="number" inputmode="numeric" step="1" min="0" id="bw" value="${p.base_weight ?? ''}"></label>`,
+    onOk: async el => {
+      const v = $('#bw', el).value.trim();
+      if (v !== '' && !/^\d+$/.test(v)) { toast('整数で入力してください'); return false; }
+      const { error } = await sb.from('plants').update({ base_weight: v === '' ? null : parseInt(v, 10) }).eq('id', id);
+      if (error) throw error;
+      await refresh(); toast('更新しました');
+    }
+  });
+
+  $('#add-memo').onclick = () => modal({
+    title: `メモを追加（${fmt(todayStr())}）`, ok: '追加',
+    body: `<textarea id="mb" placeholder="例：葉が少し黄色くなってきた"></textarea>`,
+    onOk: async el => {
+      const body = $('#mb', el).value.trim();
+      if (!body) { toast('メモを入力してください'); return false; }
+      const { error } = await sb.from('memos').insert({ plant_id: id, memo_date: todayStr(), body });
+      if (error) throw error;
+      await refresh(); toast('追加しました');
+    }
+  });
+
+  $$('[data-del]').forEach(b => b.onclick = () => modal({
+    title: 'この記録を削除しますか？', ok: '削除', danger: true,
+    body: '<p>削除すると元に戻せません。</p>',
+    onOk: async () => {
+      const { error } = await sb.from('records').delete().eq('id', b.dataset.del);
+      if (error) throw error;
+      await refresh(); toast('削除しました');
+    }
+  }));
+
+  const del = $('#delete');
+  if (del) del.onclick = () => modal({
+    title: '本当に削除しますか？', ok: '削除する', danger: true,
+    body: `<p>「${esc(dispName(p))}」を一覧から外します。</p><p class="sub">記録は消えず、一覧の「削除済みの植物」から見られます。</p>`,
+    onOk: async () => {
+      const { error } = await sb.from('plants').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+      await load(); location.hash = '#/'; toast('削除しました');
+    }
+  });
+  const res = $('#restore');
+  if (res) res.onclick = async () => {
+    const { error } = await sb.from('plants').update({ deleted_at: null }).eq('id', id);
+    if (error) return toast('失敗しました：' + error.message);
+    await refresh(); toast('元に戻しました');
+  };
+}
+
+/* ============ 植物の登録 ============ */
+function renderNew() {
+  renderTop(false);
+  const kinds = [...new Set(S.plants.map(p => p.kind).filter(Boolean))];
+  app.innerHTML = `<a class="back" href="#/">← 一覧へ</a><div class="form">
+    <label>種類<input type="text" id="n-kind" list="kinds" placeholder="例：フィカス"></label>
+    <datalist id="kinds">${kinds.map(k => `<option value="${esc(k)}">`).join('')}</datalist>
+    <label>品種（表示名）<input type="text" id="n-name" placeholder="例：ローレンティ">
+      <small>同じ品種がある場合は自動で通し番号が付きます</small></label>
+    <label>購入日<input type="date" id="n-date" value="${todayStr()}"></label>
+    <label>基準の重さ（g）<input type="number" inputmode="numeric" step="1" min="0" id="n-bw" placeholder="重さで管理しない場合は空欄"></label>
+    <label>メモ<textarea id="n-memo" placeholder="任意"></textarea></label>
+    <button class="btn primary" id="n-save">登録</button></div>`;
+  $('#n-save').onclick = async (e) => {
+    const name = $('#n-name').value.trim();
+    const bw = $('#n-bw').value.trim();
+    if (!name) return toast('品種（表示名）を入力してください');
+    if (bw !== '' && !/^\d+$/.test(bw)) return toast('基準の重さは整数で入力してください');
+    e.currentTarget.disabled = true;
+    const seq = S.plants.filter(x => x.name === name).length + 1;
+    const { data, error } = await sb.from('plants').insert({
+      kind: $('#n-kind').value.trim(), name, seq,
+      purchased_on: $('#n-date').value || null,
+      base_weight: bw === '' ? null : parseInt(bw, 10)
+    }).select().single();
+    if (error) { toast('登録に失敗しました：' + error.message); e.currentTarget.disabled = false; return; }
+    const memo = $('#n-memo').value.trim();
+    if (memo) await sb.from('memos').insert({ plant_id: data.id, memo_date: todayStr(), body: memo });
+    await load();
+    location.hash = '#/plant/' + data.id;
+    toast('登録しました');
+  };
+}
+
+/* ============ ルーティング ============ */
+function render() {
+  $('#bar')?.remove();
+  window.scrollTo(0, 0);
+  const h = location.hash;
+  let m;
+  if ((m = h.match(/^#\/plant\/([0-9a-f-]+)$/i))) renderDetail(m[1]);
+  else if (h === '#/new') renderNew();
+  else renderHome();
+}
+async function route() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { loaded = false; $('#bar')?.remove(); renderLogin(); return; }
+  if (!loaded) {
+    app.innerHTML = '<div class="empty">読み込み中…</div>';
+    try { await load(); } catch (e) { app.innerHTML = `<div class="empty">読み込みに失敗しました：${esc(e.message)}</div>`; return; }
+  }
+  render();
+}
+window.addEventListener('hashchange', route);
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') setTimeout(() => { loaded = false; route(); }, 0);
+  else if (event === 'SIGNED_IN' && !loaded) setTimeout(route, 0);
+});
+route();
+</script>
+</body>
+</html>
